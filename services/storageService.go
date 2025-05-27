@@ -222,3 +222,61 @@ func (s *StorageService) UploadFile(ctx context.Context, filename string, data [
 	publicUrl := fmt.Sprintf("%s/file/%s/%s", s.DownloadUrl, s.BucketName, filename)
 	return publicUrl, nil
 }
+
+func (s *StorageService) GenerateDownloadURL(fileName string, validDurationSeconds int) (string, error) {
+	if s.AuthToken == "" || s.APIUrl == "" || s.ShortAccountID == "" {
+		if err := s.Authenticate(); err != nil {
+			return "", err
+		}
+	}
+
+	bucketID, err := s.getBucketID()
+	if err != nil {
+		return "", err
+	}
+
+	requestBody := map[string]interface{}{
+		"bucketId":               bucketID,
+		"fileNamePrefix":         fileName,
+		"validDurationInSeconds": validDurationSeconds,
+	}
+
+	body, _ := json.Marshal(requestBody)
+
+	req, err := http.NewRequest("POST", s.APIUrl+"/b2api/v2/b2_get_download_authorization", bytes.NewBuffer(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", s.AuthToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		return "", fmt.Errorf("download auth failed: %s", string(bodyBytes))
+	}
+
+	var authResp struct {
+		AuthorizationToken string `json:"authorizationToken"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
+		return "", err
+	}
+
+	// Construct pre-signed URL
+	url := fmt.Sprintf(
+		"%s/file/%s/%s?Authorization=%s",
+		s.DownloadUrl,
+		s.BucketName,
+		fileName,
+		authResp.AuthorizationToken,
+	)
+
+	return url, nil
+}

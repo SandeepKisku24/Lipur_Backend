@@ -10,34 +10,19 @@ import (
 )
 
 func UploadSong(c *gin.Context, storageService *services.StorageService) {
-	if storageService == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Storage service not initialized"})
+	// ... (unchanged)
+}
+
+func GetSignedMusicURL(c *gin.Context, storageService *services.StorageService) {
+	fileName := c.Query("file")
+	if fileName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File name is required"})
 		return
 	}
 
-	file, err := c.FormFile("file")
+	url, err := storageService.GenerateSignedURL(fileName)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "File is required"})
-		return
-	}
-
-	f, err := file.Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
-		return
-	}
-	defer f.Close()
-
-	fileBytes := make([]byte, file.Size)
-	_, err = f.Read(fileBytes)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file"})
-		return
-	}
-
-	url, err := storageService.UploadFile(c.Request.Context(), file.Filename, fileBytes)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Upload failed: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to generate signed URL: %v", err)})
 		return
 	}
 
