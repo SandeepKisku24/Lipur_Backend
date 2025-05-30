@@ -128,7 +128,7 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 func GetSignedMusicURL(c *gin.Context, storageService *services.StorageService) {
 	fileName := c.Query("file")
 	if fileName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "File name is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File name is required to uppload "})
 		return
 	}
 
