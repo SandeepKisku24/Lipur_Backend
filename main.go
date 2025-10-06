@@ -28,6 +28,11 @@ func main() {
 	}
 	defer firestoreClient.Close()
 
+	authClient, err := app.Auth(ctx)
+	if err != nil {
+		log.Fatalf("Failed to initialize Firebase Auth: %v", err)
+	}
+
 	// Initialize S3 client for Backblaze B2
 	s3Client, err := services.NewS3Client()
 	if err != nil {
@@ -43,7 +48,7 @@ func main() {
 	fmt.Println("AccountID inside service:", service.AccountID)
 
 	r := gin.Default()
-	routes.RegisterRoutes(r, service, s3Client, firestoreClient)
+	routes.RegisterRoutes(r, service, s3Client, firestoreClient, authClient)
 
 	port := config.GetEnv("PORT")
 	log.Println("Server running on port:", port)

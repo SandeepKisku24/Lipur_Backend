@@ -163,3 +163,116 @@ func GetSongs(c *gin.Context, firestoreClient *firestore.Client) {
 
 	c.JSON(http.StatusOK, gin.H{"songs": songs})
 }
+
+// for playlist and user
+func CreatePlaylist(c *gin.Context, firestoreClient *firestore.Client) {
+	userId, exists := c.Get("userId")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	var request struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid request: %v", err)})
+		return
+	}
+
+	if request.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Playlist name is required"})
+		return
+	}
+
+	playlistId := uuid.New().String()
+	playlist := map[string]interface{}{
+		"id":          playlistId,
+		"name":        request.Name,
+		"description": request.Description,
+		"songs":       []map[string]interface{}{},
+		"createdAt":   time.Now(),
+	}
+
+	ctx := context.Background()
+	_, err := firestoreClient.Collection("users").Doc(userId.(string)).Collection("playlists").Doc(playlistId).Set(ctx, playlist)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create playlist: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "Playlist created",
+		"playlistId": playlistId,
+	})
+}
+
+func GetPlaylists(c *gin.Context, firestoreClient *firestore.Client) {
+	userId, exists := c.Get("userId")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	ctx := context.Background()
+	docs, err := firestoreClient.Collection("users").Doc(userId.(string)).Collection("playlists").OrderBy("createdAt", firestore.Desc).Documents(ctx).GetAll()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to fetch playlists: %v", err)})
+		return
+	}
+
+	playlists := []map[string]interface{}{}
+	for _, doc := range docs {
+		data := doc.Data()
+		if ts, ok := data["createdAt"].(time.Time); ok {
+			data["createdAt"] = ts.Unix()
+		}
+		playlists = append(playlists, data)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"playlists": playlists})
+}
+
+func AddSongToPlaylist(c *gin.Context, firestoreClient *firestore.Client) {
+	userId, exists := c.Get("userId")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	playlistId := c.Param("id")
+	if playlistId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Playlist ID is required"})
+		return
+	}
+
+	var request struct {
+		SongId string `json:"songId"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid request: %v", err)})
+		return
+	}
+
+	// Fetch song details
+	ctx := context.Background()
+	songDoc, err := firestoreClient.Collection("songs").Doc(request.SongId).Get(ctx)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Song not found: %v", err)})
+		return
+	}
+	songData := songDoc.Data()
+
+	// Update playlist
+	playlistRef := firestoreClient.Collection("users").Doc(userId.(string)).Collection("playlists").Doc(playlistId)
+	_, err = playlistRef.Update(ctx, []firestore.Update{
+		{Path: "songs", Value: firestore.ArrayUnion(songData)},
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to add song to playlist: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Song added to playlist"})
+}
