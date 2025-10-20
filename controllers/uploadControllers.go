@@ -61,6 +61,14 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 	if genre == "" {
 		genre = "Unknown"
 	}
+	createdYear := c.PostForm("createdYear")
+	if createdYear == "" {
+		createdYear = "time.Now().Format(\"2006\")"
+	}
+	upload_user := c.PostForm("upload_user")
+	if upload_user == "" {
+		upload_user = "admin"
+	}
 	coverUrl := c.PostForm("coverUrl")
 
 	// Upload to Backblaze B2
@@ -96,19 +104,21 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 	// Save song metadata to Firestore
 	songId := uuid.New().String()
 	metadata := map[string]interface{}{
-		"id":         songId,
-		"title":      title,
-		"artistName": artistName,
-		"artistId":   artistId,
-		"fileName":   filename,
-		"fileUrl":    publicURL,
-		"duration":   0,
-		"genre":      genre,
-		"uploadedAt": time.Now(),
-		"coverUrl":   coverUrl,
-		"likes":      0,
-		"downloads":  0,
-		"playCount":  0,
+		"id":          songId,
+		"title":       title,
+		"artistName":  artistName,
+		"artistId":    artistId,
+		"fileName":    filename,
+		"fileUrl":     publicURL,
+		"duration":    0,
+		"genre":       genre,
+		"uploadedAt":  time.Now(),
+		"coverUrl":    coverUrl,
+		"likes":       0,
+		"downloads":   0,
+		"playCount":   0,
+		"createdYear": createdYear,
+		"upload_user": upload_user,
 	}
 
 	_, err = firestoreClient.Collection("songs").Doc(songId).Set(ctx, metadata)
