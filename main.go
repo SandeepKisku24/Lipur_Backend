@@ -8,6 +8,8 @@ import (
 	"lipur_backend/services"
 	"log"
 
+	"os"
+
 	firebase "firebase.google.com/go"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/api/option"
@@ -15,9 +17,14 @@ import (
 
 func main() {
 	config.LoadEnv()
+	FIREBASE_SERVICE_ACCOUNT_JSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+	if FIREBASE_SERVICE_ACCOUNT_JSON == "" {
+		log.Fatal("FIREBASE_SERVICE_ACCOUNT_JSON env var is required")
+	}
 
 	ctx := context.Background()
-	opt := option.WithCredentialsFile("serviceAccountKey.json")
+	credJSON := []byte(os.Getenv("FIREBASE_SERVICE_ACCOUNT_JSON"))
+	opt := option.WithCredentialsJSON(credJSON)
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
 		log.Fatalf("Failed to initialize Firebase: %v", err)
