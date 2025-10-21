@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"lipur_backend/services"
 	"log"
 	"net/http"
+	"net/url"
+	"path"
 	"time"
-
-	"lipur_backend/services"
 
 	"cloud.google.com/go/firestore"
 	"github.com/gin-gonic/gin"
@@ -60,6 +61,14 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 	if genre == "" {
 		genre = "Unknown"
 	}
+	createdYear := c.PostForm("createdYear")
+	if createdYear == "" {
+		createdYear = "time.Now().Format(\"2006\")"
+	}
+	upload_user := c.PostForm("upload_user")
+	if upload_user == "" {
+		upload_user = "admin"
+	}
 	coverUrl := c.PostForm("coverUrl")
 
 	// Upload to Backblaze B2
@@ -95,19 +104,21 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 	// Save song metadata to Firestore
 	songId := uuid.New().String()
 	metadata := map[string]interface{}{
-		"id":         songId,
-		"title":      title,
-		"artistName": artistName,
-		"artistId":   artistId,
-		"fileName":   filename,
-		"fileUrl":    publicURL,
-		"duration":   0,
-		"genre":      genre,
-		"uploadedAt": time.Now(),
-		"coverUrl":   coverUrl,
-		"likes":      0,
-		"downloads":  0,
-		"playCount":  0,
+		"id":          songId,
+		"title":       title,
+		"artistName":  artistName,
+		"artistId":    artistId,
+		"fileName":    filename,
+		"fileUrl":     publicURL,
+		"duration":    0,
+		"genre":       genre,
+		"uploadedAt":  time.Now(),
+		"coverUrl":    coverUrl,
+		"likes":       0,
+		"downloads":   0,
+		"playCount":   0,
+		"createdYear": createdYear,
+		"upload_user": upload_user,
 	}
 
 	_, err = firestoreClient.Collection("songs").Doc(songId).Set(ctx, metadata)
@@ -126,19 +137,55 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 }
 
 func GetSignedMusicURL(c *gin.Context, storageService *services.StorageService) {
-	fileName := c.Query("file")
-	if fileName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "File name is required to uppload "})
+
+	fullFileUrl := c.Query("file")
+	if fullFileUrl == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File URL is required."})
 		return
 	}
 
-	url, err := storageService.GenerateSignedURL(fileName)
+	// 2. Parse the full URL
+	parsedUrl, err := url.Parse(fullFileUrl)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to generate signed URL: %v", err)})
+		log.Printf("Error parsing file URL: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid file URL format."})
 		return
 	}
 
+	// 3. Extract the Object Key (Filename)
+	// parsedUrl.Path gives us the URL path string (e.g., "/file/LipurMusic/Happier.mp3")
+	// path.Base() returns the last element of the path (e.g., "Happier.mp3")
+	// This is the robust way to extract the key regardless of the B2 structure.
+	objectKey := path.Base(parsedUrl.Path) // <--- FINAL FIX: Use path.Base()
+
+	if objectKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Could not determine file key from URL path."})
+		return
+	}
+
+	// 4. Call the service with ONLY the object key (e.g., "Happier.mp3")
+	url, err := storageService.GenerateSignedURL(objectKey)
+	if err != nil {
+		log.Printf("Failed to generate signed URL: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to generate signed URL: %v", err)})
+		return
+	}
+
+	// 5. Response structure
 	c.JSON(http.StatusOK, gin.H{"url": url})
+	// fileName := c.Query("file")
+	// if fileName == "" {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "File name is required to uppload "})
+	// 	return
+	// }
+
+	// url, err := storageService.GenerateSignedURL(fileName)
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to generate signed URL: %v", err)})
+	// 	return
+	// }
+
+	// c.JSON(http.StatusOK, gin.H{"url": url})
 }
 
 func GetSongs(c *gin.Context, firestoreClient *firestore.Client) {
