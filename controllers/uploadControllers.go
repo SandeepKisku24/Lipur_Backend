@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -52,11 +53,11 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 	if title == "" {
 		title = filename // Fallback to filename if title is empty
 	}
-	artistName := c.PostForm("artist")
-	if artistName == "" {
-		artistName = "Unknown Artist"
+	artistNames := c.PostFormArray("artists") // Array of artist names
+	log.Printf("Received artist names: %v", artistNames)
+	if len(artistNames) == 0 {
+		artistNames = []string{"Unknown Artist"}
 	}
-	artistId := c.PostForm("artistId")
 	genre := c.PostForm("genre")
 	if genre == "" {
 		genre = "Unknown"
@@ -87,8 +88,20 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 	}
 
 	// Generate artistId if not provided
-	if artistId == "" {
-		artistId = uuid.New().String()
+	finalArtistNames := []string{}
+	finalArtistIds := []string{}
+	log.Println("Starting artist processing...", len(artistNames))
+	// 1. Iterate through all submitted artist names
+	for _, artistName := range artistNames {
+		artistName = strings.TrimSpace(artistName)
+		log.Println("Processing artist name:", artistName)
+		if artistName == "" {
+			continue // Skip empty entries
+		}
+
+		// 2. Generate a new UUID for the artist
+		artistId := uuid.New().String()
+
 		_, err = firestoreClient.Collection("artists").Doc(artistId).Set(ctx, map[string]interface{}{
 			"name":            artistName,
 			"bio":             "",
@@ -96,9 +109,12 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 			"createdAt":       time.Now(),
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save artist: %v", err)})
-			return
+			log.Printf("Warning: Failed to save artist %s: %v", artistName, err)
+			// Decide whether to fail the song upload or continue
 		}
+
+		finalArtistNames = append(finalArtistNames, artistName)
+		finalArtistIds = append(finalArtistIds, artistId)
 	}
 
 	// Save song metadata to Firestore
@@ -106,8 +122,8 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 	metadata := map[string]interface{}{
 		"id":          songId,
 		"title":       title,
-		"artistName":  artistName,
-		"artistId":    artistId,
+		"artistNames": finalArtistNames,
+		"artistIds":   finalArtistIds,
 		"fileName":    filename,
 		"fileUrl":     publicURL,
 		"duration":    0,
