@@ -94,27 +94,49 @@ func UploadSong(c *gin.Context, storageService *services.StorageService, firesto
 	// 1. Iterate through all submitted artist names
 	for _, artistName := range artistNames {
 		artistName = strings.TrimSpace(artistName)
-		log.Println("Processing artist name:", artistName)
 		if artistName == "" {
-			continue // Skip empty entries
+			continue
 		}
 
-		// 2. Generate a new UUID for the artist
-		artistId := uuid.New().String()
+		artistRef := firestoreClient.Collection("artists")
 
-		_, err = firestoreClient.Collection("artists").Doc(artistId).Set(ctx, map[string]interface{}{
-			"name":            artistName,
-			"bio":             "",
-			"profileImageUrl": "",
-			"createdAt":       time.Now(),
-		})
+		// 1. Check if artist already exists by name
+		query := artistRef.Where("name", "==", artistName).Limit(1)
+		docs, err := query.Documents(ctx).GetAll()
+
 		if err != nil {
-			log.Printf("Warning: Failed to save artist %s: %v", artistName, err)
-			// Decide whether to fail the song upload or continue
+			log.Printf("Firestore query error for artist %s: %v", artistName, err)
+			// Fallback: Continue processing, assuming it's a new artist
+		}
+		var artistDocId string // <--- Variable to hold the actual Firestore Doc ID
+
+		if len(docs) > 0 {
+			// Case A: Artist Found - Reuse the Firestore Document ID
+			artistDocId = docs[0].Ref.ID
+			log.Printf("Artist found: %s, ID: %s", artistDocId, artistDocId)
+
+			// Ensure the data saved in the song collection is clean
+		} else {
+			// Case B: Artist Not Found - Create new record
+			// Generate UUID for the new DOCUMENT ID (Best Practice)
+			artistDocId = uuid.New().String()
+
+			_, setErr := artistRef.Doc(artistDocId).Set(ctx, map[string]interface{}{
+				"name":            artistName,
+				"bio":             "",
+				"profileImageUrl": "",
+				"createdAt":       time.Now(),
+				"id":              artistDocId, // Store the ID inside the document as well (optional but helpful)
+			})
+			if setErr != nil {
+				log.Printf("Warning: Failed to save NEW artist %s: %v", artistName, setErr)
+			}
+			log.Printf("New artist created: %s, ID: %s", artistName, artistDocId)
 		}
 
+		// 3. Append the canonical Firestore Document ID and Name for song metadata
 		finalArtistNames = append(finalArtistNames, artistName)
-		finalArtistIds = append(finalArtistIds, artistId)
+		finalArtistIds = append(finalArtistIds, artistDocId) // <--- Use the Document ID
 	}
 
 	// Save song metadata to Firestore
@@ -338,4 +360,152 @@ func AddSongToPlaylist(c *gin.Context, firestoreClient *firestore.Client) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Song added to playlist"})
+}
+
+type SongDataStructure struct {
+	ID          string   `firestore:"id"`
+	ArtistNames []string `firestore:"artistNames"` // Array of names
+	ArtistIds   []string `firestore:"artistIds"`   // Array of IDs (potentially bad)
+}
+
+type ArtistDataStructure struct {
+	ID   string `firestore:"id"`
+	Name string `firestore:"name"`
+}
+
+// MigrateArtistIDs performs a full cleanup and normalization of artist IDs.
+// This should ONLY be run by an administrator.
+func MigrateArtistIDs(c *gin.Context, firestoreClient *firestore.Client) {
+	ctx := context.Background()
+	log.Println("Starting full Artist ID Normalization and Migration...")
+
+	// Key: Clean Lowercase Artist Name (string), Value: Canonical Stable Artist ID (string)
+	canonicalIDMap := make(map[string]string)
+
+	// Total updates tracker
+	var songsUpdated int
+
+	// --- 1. STAGE 1: Normalize Artists Collection (Establish Canonical IDs) ---
+
+	artistDocs, err := firestoreClient.Collection("artists").Documents(ctx).GetAll()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to fetch artists: %v", err)})
+		return
+	}
+
+	artistBatch := firestoreClient.Batch()
+
+	// Separate batch to delete duplicates in a separate transaction if needed, but we merge into one for efficiency
+	var deletedArtistCount int
+
+	for _, doc := range artistDocs {
+		name, ok := doc.Data()["name"].(string)
+		if !ok || name == "" {
+			log.Printf("Warning: Artist document %s has invalid or missing name. Deleting.", doc.Ref.ID)
+			artistBatch.Delete(doc.Ref)
+			continue
+		}
+
+		// FIX 1: Normalize the name: lowercase and trim whitespace for the map key
+		cleanName := strings.ToLower(strings.TrimSpace(name))
+
+		if stableID, exists := canonicalIDMap[cleanName]; exists {
+			// Case A: Duplicate found. Mark the current document for deletion.
+			log.Printf("Duplicate artist found: %s. Doc %s marked for deletion, using canonical ID %s.", cleanName, doc.Ref.ID, stableID)
+			artistBatch.Delete(doc.Ref)
+			deletedArtistCount++
+			continue
+		}
+
+		// Case B: First time encountering this artist. Establish this ID as canonical.
+		var canonicalID string
+		// Use document ID as canonical ID, unless it's obviously bad (e.g., auto-generated short ID)
+		if len(doc.Ref.ID) < 10 {
+			canonicalID = uuid.New().String()
+		} else {
+			canonicalID = doc.Ref.ID
+		}
+
+		// Add to map using the CLEANED name
+		canonicalIDMap[cleanName] = canonicalID
+
+		// Update the document to ensure 'id' field is present and consistent with Doc ID
+		artistBatch.Set(doc.Ref, map[string]interface{}{
+			"id":        canonicalID,
+			"name":      name,
+			"createdAt": time.Now(),
+		}, firestore.MergeAll)
+	}
+
+	// Commit Artist Normalization Batch
+	_, err = artistBatch.Commit(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Artist normalization failed: %v", err)})
+		return
+	}
+
+	log.Printf("Artist normalization successful. %d artists stabilized. %d duplicates deleted. Starting song migration...", len(canonicalIDMap), deletedArtistCount)
+
+	// --- 2. STAGE 2: Update Song Documents ---
+
+	songDocs, err := firestoreClient.Collection("songs").Documents(ctx).GetAll()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to fetch songs for update: %v", err)})
+		return
+	}
+
+	songBatch := firestoreClient.Batch()
+
+	for _, doc := range songDocs {
+		var song SongDataStructure
+		doc.DataTo(&song)
+
+		var newArtistIds []string
+
+		// Process only if ArtistNames exist
+		if len(song.ArtistNames) == 0 {
+			song.ArtistNames = []string{"Unknown Artist"}
+		}
+
+		// Build the new array of IDs based on the stable name map
+		for _, name := range song.ArtistNames {
+			// FIX 2: Normalize the name before lookup
+			cleanName := strings.ToLower(strings.TrimSpace(name))
+
+			if stableID, ok := canonicalIDMap[cleanName]; ok {
+				newArtistIds = append(newArtistIds, stableID) // Use the stable ID
+			} else {
+				// Fallback: If the artist name exists in the song but wasn't in the collection
+				// (e.g., if the artist document was deleted), create a new unique ID for consistency.
+				newArtistIds = append(newArtistIds, uuid.New().String())
+			}
+		}
+
+		// Only update if the content has changed
+		// Note: Comparing arrays by converting to string is simple but relies on element order
+		// We only compare length for simplicity here.
+		if len(newArtistIds) > 0 && len(newArtistIds) != len(song.ArtistIds) {
+			songsUpdated++
+		}
+
+		// Always perform the update to ensure the structure is clean and IDs are consistent
+		songBatch.Update(doc.Ref, []firestore.Update{
+			{Path: "artistIds", Value: newArtistIds},
+			{Path: "artistNames", Value: song.ArtistNames}, // Re-save name array for consistency
+		})
+	}
+
+	// Commit Song Update Batch
+	_, err = songBatch.Commit(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Song batch migration failed: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":             "Artist IDs successfully normalized and songs updated.",
+		"artists_stabilized":  len(canonicalIDMap),
+		"duplicates_deleted":  deletedArtistCount,
+		"songs_updated_count": songsUpdated,
+	})
 }

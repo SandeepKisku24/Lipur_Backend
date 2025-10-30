@@ -45,6 +45,9 @@ func RegisterRoutes(r *gin.Engine, storageService *services.StorageService, s3Cl
 		protected.POST("/playlists/:id/songs", func(c *gin.Context) {
 			controllers.AddSongToPlaylist(c, firestoreClient)
 		})
+		r.POST("/admin/migrate-artists", func(c *gin.Context) {
+			controllers.MigrateArtistIDs(c, firestoreClient)
+		})
 	}
 
 }
