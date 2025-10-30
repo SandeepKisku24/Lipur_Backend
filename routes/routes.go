@@ -48,6 +48,15 @@ func RegisterRoutes(r *gin.Engine, storageService *services.StorageService, s3Cl
 		r.POST("/admin/migrate-artists", func(c *gin.Context) {
 			controllers.MigrateArtistIDs(c, firestoreClient)
 		})
+		r.GET("/search", func(c *gin.Context) { // Endpoint: /search?q=query
+			controllers.Search(c, firestoreClient)
+		})
+		r.GET("/admin/normalize-search", func(c *gin.Context) { // Endpoint: /search?q=query
+			controllers.NormalizeSearchFields(c, firestoreClient)
+		})
+		r.GET("/songs-by-artist", func(c *gin.Context) {
+			controllers.GetSongsByArtist(c, firestoreClient)
+		})
 	}
 
 }
