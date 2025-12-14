@@ -66,5 +66,8 @@ func RegisterRoutes(r *gin.Engine, storageService *services.StorageService, s3Cl
 	r.PATCH("/songs/:id/metadata", func(c *gin.Context) {
 		controllers.UpdateSongMetadata(c, firestoreClient)
 	})
+	r.GET("/analytics/history", func(c *gin.Context) {
+		controllers.GetListeningHistory(c, firestoreClient)
+	})
 
 }
