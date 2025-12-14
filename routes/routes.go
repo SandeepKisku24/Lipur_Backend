@@ -57,6 +57,14 @@ func RegisterRoutes(r *gin.Engine, storageService *services.StorageService, s3Cl
 		r.GET("/songs-by-artist", func(c *gin.Context) {
 			controllers.GetSongsByArtist(c, firestoreClient)
 		})
+
 	}
+	r.POST("/analytics/listen", func(c *gin.Context) {
+		controllers.RecordListeningSession(c, firestoreClient)
+	})
+	// Route to lazy-fix the zero durations
+	r.PATCH("/songs/:id/metadata", func(c *gin.Context) {
+		controllers.UpdateSongMetadata(c, firestoreClient)
+	})
 
 }
