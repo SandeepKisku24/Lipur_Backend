@@ -117,3 +117,37 @@ func UpdateSongMetadata(c *gin.Context, firestoreClient *firestore.Client) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Metadata updated"})
 }
+
+func GetListeningHistory(c *gin.Context, firestoreClient *firestore.Client) {
+	// Get userId from Query Param (e.g. ?userId=xyz)
+	userId := c.Query("userId")
+	if userId == "" {
+		userId = "anonymous"
+	}
+
+	ctx := context.Background()
+
+	// Fetch last 50 entries (we fetch more than needed to handle duplicates)
+	docs, err := firestoreClient.Collection("users").Doc(userId).Collection("listening_history").
+		OrderBy("timestamp", firestore.Desc).
+		Limit(50).
+		Documents(ctx).
+		GetAll()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch history"})
+		return
+	}
+
+	var history []map[string]interface{}
+	for _, doc := range docs {
+		data := doc.Data()
+		// Convert timestamp to unix for easier frontend handling
+		if ts, ok := data["timestamp"].(time.Time); ok {
+			data["timestamp"] = ts.Unix()
+		}
+		history = append(history, data)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"history": history})
+}
