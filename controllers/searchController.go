@@ -1,3 +1,7 @@
+// File: controllers/searchController.go
+// Description: Handles search functionality for songs and artists with
+// normalized search fields for improved query performance.
+
 package controllers
 
 import (

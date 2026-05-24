@@ -1,3 +1,7 @@
+// File: controllers/uploadControllers.go
+// Description: Handles song uploads, signed URL generation, song retrieval,
+// playlist management, artist migrations, and search field normalization.
+
 package controllers
 
 import (
@@ -258,7 +262,7 @@ func GetSongs(c *gin.Context, firestoreClient *firestore.Client) {
 
 // for playlist and user
 func CreatePlaylist(c *gin.Context, firestoreClient *firestore.Client) {
-	userId, exists := c.Get("userId")
+	uid, exists := c.Get("uid")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
@@ -288,7 +292,7 @@ func CreatePlaylist(c *gin.Context, firestoreClient *firestore.Client) {
 	}
 
 	ctx := context.Background()
-	_, err := firestoreClient.Collection("users").Doc(userId.(string)).Collection("playlists").Doc(playlistId).Set(ctx, playlist)
+	_, err := firestoreClient.Collection("users").Doc(uid.(string)).Collection("playlists").Doc(playlistId).Set(ctx, playlist)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create playlist: %v", err)})
 		return
@@ -301,14 +305,14 @@ func CreatePlaylist(c *gin.Context, firestoreClient *firestore.Client) {
 }
 
 func GetPlaylists(c *gin.Context, firestoreClient *firestore.Client) {
-	userId, exists := c.Get("userId")
+	uid, exists := c.Get("uid")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
 
 	ctx := context.Background()
-	docs, err := firestoreClient.Collection("users").Doc(userId.(string)).Collection("playlists").OrderBy("createdAt", firestore.Desc).Documents(ctx).GetAll()
+	docs, err := firestoreClient.Collection("users").Doc(uid.(string)).Collection("playlists").OrderBy("createdAt", firestore.Desc).Documents(ctx).GetAll()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to fetch playlists: %v", err)})
 		return
@@ -327,7 +331,7 @@ func GetPlaylists(c *gin.Context, firestoreClient *firestore.Client) {
 }
 
 func AddSongToPlaylist(c *gin.Context, firestoreClient *firestore.Client) {
-	userId, exists := c.Get("userId")
+	uid, exists := c.Get("uid")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
@@ -357,7 +361,7 @@ func AddSongToPlaylist(c *gin.Context, firestoreClient *firestore.Client) {
 	songData := songDoc.Data()
 
 	// Update playlist
-	playlistRef := firestoreClient.Collection("users").Doc(userId.(string)).Collection("playlists").Doc(playlistId)
+	playlistRef := firestoreClient.Collection("users").Doc(uid.(string)).Collection("playlists").Doc(playlistId)
 	_, err = playlistRef.Update(ctx, []firestore.Update{
 		{Path: "songs", Value: firestore.ArrayUnion(songData)},
 	})

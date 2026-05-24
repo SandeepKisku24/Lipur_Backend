@@ -1,3 +1,7 @@
+// File: middleware/auth.go
+// Description: Authentication middleware that verifies Firebase ID tokens (JWT)
+// and protects routes requiring user authentication.
+
 package middleware
 
 import (

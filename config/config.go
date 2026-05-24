@@ -1,3 +1,6 @@
+// File: config/config.go
+// Description: Loads and manages environment configuration variables for the application.
+
 package config
 
 import (
