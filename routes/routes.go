@@ -49,16 +49,28 @@ func RegisterRoutes(r *gin.Engine, storageService *services.StorageService, s3Cl
 		protected.POST("/playlists/:id/songs", func(c *gin.Context) {
 			controllers.AddSongToPlaylist(c, firestoreClient)
 		})
-		r.POST("/admin/migrate-artists", func(c *gin.Context) {
+
+		protected.POST("/songs/like", func(c *gin.Context) {
+			controllers.ToggleLikeSong(c, firestoreClient)
+		})
+		protected.POST("/artists/follow", func(c *gin.Context) {
+			controllers.FollowArtist(c, firestoreClient)
+		})
+
+		protected.GET("/songs/download", func(c *gin.Context) {
+			controllers.DownloadSong(c, firestoreClient, storageService)
+		})
+
+		protected.POST("/admin/migrate-artists", func(c *gin.Context) {
 			controllers.MigrateArtistIDs(c, firestoreClient)
 		})
-		r.GET("/search", func(c *gin.Context) { // Endpoint: /search?q=query
+		protected.GET("/search", func(c *gin.Context) { // Endpoint: /search?q=query
 			controllers.Search(c, firestoreClient)
 		})
-		r.GET("/admin/normalize-search", func(c *gin.Context) { // Endpoint: /search?q=query
+		protected.GET("/admin/normalize-search", func(c *gin.Context) { // Endpoint: /search?q=query
 			controllers.NormalizeSearchFields(c, firestoreClient)
 		})
-		r.GET("/songs-by-artist", func(c *gin.Context) {
+		protected.GET("/songs-by-artist", func(c *gin.Context) {
 			controllers.GetSongsByArtist(c, firestoreClient)
 		})
 
@@ -73,5 +85,4 @@ func RegisterRoutes(r *gin.Engine, storageService *services.StorageService, s3Cl
 	r.GET("/analytics/history", func(c *gin.Context) {
 		controllers.GetListeningHistory(c, firestoreClient)
 	})
-
 }
