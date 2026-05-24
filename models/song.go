@@ -1,3 +1,6 @@
+// File: models/song.go
+// Description: Defines the Song data structure used throughout the application.
+
 package models
 
 type Song struct {

@@ -1,3 +1,7 @@
+// File: controllers/userControllers.go
+// Description: Handles user registration, login, and user-related endpoints
+// with Firebase authentication integration.
+
 package controllers
 
 import (
@@ -122,3 +126,60 @@ func ListUsers(c *gin.Context, firestoreClient *firestore.Client) {
 		"detail":           "Listing users not implemented, but auth works!",
 	})
 }
+
+// GetTestToken generates a valid ID token for testing using an existing Firestore user
+// func GetTestToken(c *gin.Context, authClient *auth.Client) {
+// 	ctx := context.Background()
+
+// 	// Get the user UID from query parameter (e.g., ?uid=swpYmSh8l6UorlPl4I2iitIY5zq1)
+// 	uid := c.Query("uid")
+// 	if uid == "" {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'uid' query parameter"})
+// 		return
+// 	}
+
+// 	// Step 1: Create a custom token on the backend
+// 	customToken, err := authClient.CustomToken(ctx, uid)
+// 	if err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create custom token: %v", err)})
+// 		return
+// 	}
+
+// 	// Step 2: Exchange custom token for ID token using Firebase REST API
+// 	firebaseWebAPIKey := os.Getenv("FIREBASE_WEB_API_KEY")
+// 	if firebaseWebAPIKey == "" {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "FIREBASE_WEB_API_KEY not configured"})
+// 		return
+// 	}
+
+// 	exchangeURL := fmt.Sprintf("https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=%s", firebaseWebAPIKey)
+
+// 	payload := map[string]interface{}{
+// 		"token":             customToken,
+// 		"returnSecureToken": true,
+// 	}
+
+// 	payloadBytes, _ := json.Marshal(payload)
+// 	resp, err := http.Post(exchangeURL, "application/json", bytes.NewBuffer(payloadBytes))
+// 	if err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to exchange token: %v", err)})
+// 		return
+// 	}
+// 	defer resp.Body.Close()
+
+// 	body, _ := io.ReadAll(resp.Body)
+
+// 	var result map[string]interface{}
+// 	json.Unmarshal(body, &result)
+
+// 	if resp.StatusCode != http.StatusOK {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Token exchange failed: %v", result)})
+// 		return
+// 	}
+
+// 	c.JSON(http.StatusOK, gin.H{
+// 		"idToken": result["idToken"],
+// 		"uid":     result["localId"],
+// 		"message": "Use the 'idToken' in Authorization header: Bearer <idToken>",
+// 	})
+// }

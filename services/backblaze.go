@@ -1,3 +1,7 @@
+// File: services/backblaze.go
+// Description: Implements S3-compatible client for Backblaze B2 bucket operations
+// including authentication, bucket management, and S3 client initialization.
+
 package services
 
 import (

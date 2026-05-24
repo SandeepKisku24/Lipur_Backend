@@ -1,3 +1,7 @@
+// File: routes/routes.go
+// Description: Registers all API routes including public and protected endpoints.
+// Routes are organized by feature: uploads, streaming, songs, users, playlists, search, and analytics.
+
 package routes
 
 import (
@@ -45,6 +49,40 @@ func RegisterRoutes(r *gin.Engine, storageService *services.StorageService, s3Cl
 		protected.POST("/playlists/:id/songs", func(c *gin.Context) {
 			controllers.AddSongToPlaylist(c, firestoreClient)
 		})
-	}
 
+		protected.POST("/songs/like", func(c *gin.Context) {
+			controllers.ToggleLikeSong(c, firestoreClient)
+		})
+		protected.POST("/artists/follow", func(c *gin.Context) {
+			controllers.FollowArtist(c, firestoreClient)
+		})
+
+		protected.GET("/songs/download", func(c *gin.Context) {
+			controllers.DownloadSong(c, firestoreClient, storageService)
+		})
+
+		protected.POST("/admin/migrate-artists", func(c *gin.Context) {
+			controllers.MigrateArtistIDs(c, firestoreClient)
+		})
+		protected.GET("/search", func(c *gin.Context) { // Endpoint: /search?q=query
+			controllers.Search(c, firestoreClient)
+		})
+		protected.GET("/admin/normalize-search", func(c *gin.Context) { // Endpoint: /search?q=query
+			controllers.NormalizeSearchFields(c, firestoreClient)
+		})
+		protected.GET("/songs-by-artist", func(c *gin.Context) {
+			controllers.GetSongsByArtist(c, firestoreClient)
+		})
+
+	}
+	r.POST("/analytics/listen", func(c *gin.Context) {
+		controllers.RecordListeningSession(c, firestoreClient)
+	})
+	// Route to lazy-fix the zero durations
+	r.PATCH("/songs/:id/metadata", func(c *gin.Context) {
+		controllers.UpdateSongMetadata(c, firestoreClient)
+	})
+	r.GET("/analytics/history", func(c *gin.Context) {
+		controllers.GetListeningHistory(c, firestoreClient)
+	})
 }
