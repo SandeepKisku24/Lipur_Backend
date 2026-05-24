@@ -1,3 +1,6 @@
+// File: utils/avatar.go
+// Description: Utility functions for generating user avatars.
+
 package utils
 
 func GenerateAvatar(title, artist string) string {

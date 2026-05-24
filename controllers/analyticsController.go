@@ -1,3 +1,7 @@
+// File: controllers/analyticsController.go
+// Description: Handles analytics endpoints including listening sessions tracking
+// and listening history retrieval.
+
 package controllers
 
 import (

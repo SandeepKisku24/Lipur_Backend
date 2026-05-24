@@ -1,3 +1,7 @@
+// File: routes/routes.go
+// Description: Registers all API routes including public and protected endpoints.
+// Routes are organized by feature: uploads, streaming, songs, users, playlists, search, and analytics.
+
 package routes
 
 import (

@@ -1,3 +1,7 @@
+// File: controllers/uploadControllers.go
+// Description: Handles song uploads, signed URL generation, song retrieval,
+// playlist management, artist migrations, and search field normalization.
+
 package controllers
 
 import (

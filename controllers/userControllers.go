@@ -1,3 +1,7 @@
+// File: controllers/userControllers.go
+// Description: Handles user registration, login, and user-related endpoints
+// with Firebase authentication integration.
+
 package controllers
 
 import (

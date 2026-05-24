@@ -1,3 +1,7 @@
+// File: services/storageService.go
+// Description: Handles cloud storage operations including file uploads to Backblaze B2,
+// signed URL generation, and bucket management.
+
 package services
 
 import (

@@ -1,3 +1,7 @@
+// File: main.go
+// Description: Application entry point that initializes Firebase services,
+// Firestore client, storage service, and starts the HTTP server.
+
 package main
 
 import (
